@@ -26,5 +26,5 @@ class Post(db.Model):
     content=db.Column(db.Text,nullable=False)
     user_id=db.Column(db.Integer,db.ForeignKey('user.id'),nullable=False)
     
-    def __repr__(self): ##method to show 
-        return f"User('{self.title}','{self.date_posted}')"
+    def __repr__(self):
+        return f"Post(title='{self.title}', author='{self.author.username}', date='{self.date_posted}')"
