@@ -13,10 +13,18 @@
           </div>
         {% endif %}
       </div>
+
+      {% if post.gemini_verified == True %}
+        <p class="text-success"><strong>✅ News is verified by Gemini</strong></p>
+      {% elif post.gemini_verified == False %}
+        <p class="text-danger"><strong>⚠️ Gemini suggested this as fake</strong></p>
+      {% endif %}
+
       <h2 class="article-title">{{ post.title }}</h2>
       <p class="article-content">{{ post.content }}</p>
     </div>
   </article>
+
   <!-- Modal -->
   <div class="modal fade" id="deleteModal" tabindex="-1" role="dialog" aria-labelledby="deleteModalLabel" aria-hidden="true">
     <div class="modal-dialog" role="document">

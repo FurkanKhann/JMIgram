@@ -1,10 +1,9 @@
-from app1 import app, db
-from app1.models import Post
+# create_db.py
 
+from flaskblog import db, app
 
-
+# Recreate database from models by dropping and creating tables
 with app.app_context():
-    # Delete all posts
-    Post.query.delete()
-    db.session.commit()
-    print("All posts deleted.")
+    db.drop_all()
+    db.create_all()
+    print("✅ Database dropped and recreated successfully!")

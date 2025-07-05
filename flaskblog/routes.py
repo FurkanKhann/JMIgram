@@ -8,6 +8,16 @@ from flaskblog.forms import (RegistrationForm, LoginForm, UpdateAccountForm,
 from flaskblog.models import User, Post
 from flask_login import login_user, current_user, logout_user, login_required
 from flask_mail import Message
+import google.generativeai as genai
+from dotenv import load_dotenv
+# Load environment variables
+load_dotenv()
+
+# Configure Gemini with your API key
+genai.configure(api_key=os.getenv('API_KEY'))
+
+# Load the model
+model = genai.GenerativeModel("gemini-2.5-flash")
 
 # ---------------------- HOME & ABOUT ----------------------
 
@@ -38,6 +48,7 @@ def save_picture(form_picture):
     i.save(picture_path)
 
     return picture_fn
+
 
 
 def send_reset_email(user):
@@ -156,6 +167,25 @@ def reset_token(token):
 
 # ---------------------- POST ROUTES ----------------------
 
+def verify_post_with_gemini(post_content):
+    prompt = f"""You are a fact-checking AI assistant. Given the following post content, 
+    respond with only `true` if the news seems likely to be true, or `false` if it seems fake. 
+    Be concise and do not include explanations.
+
+    Post: "{post_content}"
+    Is this news likely true or fake? (Only respond `true` or `false`)
+    """
+    try:
+        response = model.generate_content(prompt)
+        verdict = response.text.strip().lower()
+        if 'true' in verdict:
+            return True
+        elif 'false' in verdict:
+            return False
+    except Exception as e:
+        print("Gemini API Error:", e)
+    return None  # In case of error
+
 @app.route("/post/new", methods=['GET', 'POST'])
 @login_required
 def new_post():
@@ -164,10 +194,16 @@ def new_post():
         post = Post(title=form.title.data, content=form.content.data, author=current_user)
         db.session.add(post)
         db.session.commit()
-        flash('Your post has been created!', 'success')
+
+        # Run Gemini verification after post creation
+        verified = verify_post_with_gemini(post.content)
+        post.gemini_verified = verified
+        db.session.commit()
+
+        flash('Post created!', 'success')
         return redirect(url_for('home'))
-    return render_template('create_post.html', title='New Post',
-                           form=form, legend='New Post')
+    return render_template('create_post.html', title='New Post', form=form, legend='New Post')
+
 
 
 @app.route("/post/<int:post_id>")
@@ -206,3 +242,30 @@ def delete_post(post_id):
     db.session.commit()
     flash('Your post has been deleted!', 'success')
     return redirect(url_for('home'))
+
+
+@app.route("/like/<int:post_id>", methods=["POST"])
+@login_required
+def like_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if current_user in post.liked_by:
+        post.liked_by.remove(current_user)  # Dislike
+        flash("Like removed", "info")
+    else:
+        post.liked_by.append(current_user)  # Like
+        flash("Post liked", "success")
+    db.session.commit()
+    return redirect(request.referrer or url_for('home'))
+
+@app.route("/report/<int:post_id>", methods=["POST"])
+@login_required
+def report_post(post_id):
+    post = Post.query.get_or_404(post_id)
+    if current_user in post.reported_by:
+        post.reported_by.remove(current_user)  # Un-report
+        flash("Report removed", "info")
+    else:
+        post.reported_by.append(current_user)  # Report
+        flash("Post reported", "warning")
+    db.session.commit()
+    return redirect(request.referrer or url_for('home'))
