@@ -33,11 +33,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .article-title {
-  color: #444444;
+  color: white;
 }
 
 a.article-title:hover {
-  color: #428bca;
+  color: rgb(75, 75, 249);
   text-decoration: none;
 }
 
@@ -58,7 +58,7 @@ a.article-title:hover {
 }
 
 .article-metadata a:hover {
-  color: #333;
+  color: rgb(75, 75, 249);
   text-decoration: none;
 }
 
@@ -82,9 +82,26 @@ a.article-title:hover {
 
 .content-section{
   border-radius: 10px;
+  background-color: #333;
 
 }
 
 .myedit{
   border-radius: 5px;
+  border: white;
+  color: white;
+  background: black;
+}
+
+
+
+.name{
+  color: white;
+}
+.mydate{
+  color: white;
+}
+
+.bg-steel{
+  background: #333;
 }

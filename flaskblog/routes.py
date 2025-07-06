@@ -222,14 +222,20 @@ def update_post(post_id):
     if form.validate_on_submit():
         post.title = form.title.data
         post.content = form.content.data
+
+        # Re-run Gemini verification after update
+        verified = verify_post_with_gemini(post.content)
+        post.gemini_verified = verified
+
         db.session.commit()
-        flash('Your post has been updated!', 'success')
+        flash('Your post has been updated and re-verified!', 'success')
         return redirect(url_for('post', post_id=post.id))
     elif request.method == 'GET':
         form.title.data = post.title
         form.content.data = post.content
     return render_template('create_post.html', title='Update Post',
                            form=form, legend='Update Post')
+
 
 
 @app.route("/post/<int:post_id>/delete", methods=['POST'])

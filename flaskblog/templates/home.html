@@ -5,11 +5,11 @@
     <img class="rounded-circle article-img" src="{{ url_for('static',filename='profile_pic/'+post.author.image_file) }}">
     <div class="media-body">
       <div class="article-metadata">
-        <a class="mr-2" href="{{ url_for('user_posts', username=post.author.username) }}">{{ post.author.username }}</a>
-        <small class="text-muted">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
+        <a class="mr-2 name" href="{{ url_for('user_posts', username=post.author.username) }}">{{ post.author.username }}</a>
+        <small class="text-muted" style="color: white;">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
       </div>
       <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
-      <p class="article-content">{{ post.content }}</p>
+      <p class="article-content" style="color: white;">{{ post.content }}</p>
 
       {% if post.gemini_verified == True %}
         <p class="text-success"><strong>✅ News is verified by Gemini</strong></p>

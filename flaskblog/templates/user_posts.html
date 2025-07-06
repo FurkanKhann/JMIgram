@@ -1,6 +1,6 @@
 {% extends "layout.html" %}
 {% block content %}
-  <h1 class="mb-3">Posts by {{ user.username }} ({{ posts.total }})</h1>
+  <h1 class="mb-3" style="color: aliceblue;">Posts by {{ user.username }} ({{ posts.total }})</h1>
   {% for post in posts.items %}
   <article class="media content-section">
     <img class="rounded-circle article-img" src="{{ url_for('static', filename='profile_pic/' + post.author.image_file) }}">
@@ -10,7 +10,7 @@
         <small class="text-muted">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
       </div>
       <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
-      <p class="article-content">{{ post.content }}</p>
+      <p class="article-content" style="color: white;">{{ post.content }}</p>
 
       {# ✅ Show Gemini verification result #}
       {% if post.gemini_verified == true %}
