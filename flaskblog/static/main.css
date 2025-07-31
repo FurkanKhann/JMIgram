@@ -9,7 +9,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .bg-steel {
-  background-color: #5f788a;
+  background-color: #8b8b8b;
 }
 
 .site-header .navbar-nav .nav-link {
@@ -25,9 +25,9 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .content-section {
-  background: #ffffff;
+  background: #282828 !important;
   padding: 10px 20px;
-  border: 1px solid #dddddd;
+  border: 1px solid #bbe741;
   border-radius: 3px;
   margin-bottom: 20px;
 }
@@ -37,7 +37,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 a.article-title:hover {
-  color: rgb(75, 75, 249);
+  color: #bbe741;
   text-decoration: none;
 }
 
@@ -58,7 +58,7 @@ a.article-title:hover {
 }
 
 .article-metadata a:hover {
-  color: rgb(75, 75, 249);
+  color: #bbe741 !important;
   text-decoration: none;
 }
 
@@ -80,11 +80,7 @@ a.article-title:hover {
 }
 
 
-.content-section{
-  border-radius: 10px;
-  background-color: #333;
 
-}
 
 .myedit{
   border-radius: 5px;
@@ -112,5 +108,103 @@ a.article-title:hover {
 
 .bg-steel{
   background: #333;
+}
+
+.content-wrapper {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 15px;
+}
+
+@media (max-width: 768px) {
+    .content-wrapper {
+        max-width: 100%;
+        padding: 0 10px;
+    }
+}
+
+
+.centered-content {
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 0 20px;
+}
+
+.pagination-wrapper {
+    text-align: center;
+    margin-top: 20px;
+}
+
+.pagination-wrapper .btn {
+    margin: 0 5px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 992px) {
+    .centered-content {
+        max-width: 90%;
+        padding: 0 15px;
+    }
+}
+
+/* Main content wrapper for centered posts without sidebar */
+.main-content-wrapper {
+    max-width: 600px;
+    margin: 0 auto;
+    padding: 20px;
+    width: 100%;
+}
+
+/* Centered pagination */
+.pagination-center {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 30px;
+    gap: 10px;
+}
+
+.pagination-center .btn {
+    margin: 0 2px;
+}
+
+/* Responsive adjustments for no sidebar layout */
+@media (max-width: 1200px) {
+    .main-content-wrapper {
+        max-width: 700px;
+        padding: 15px;
+    }
+}
+
+@media (max-width: 992px) {
+    .main-content-wrapper {
+        max-width: 80%;
+        padding: 15px;
+    }
+}
+
+@media (max-width: 768px) {
+    .main-content-wrapper {
+        max-width: 90%;
+        padding: 10px;
+    }
+}
+
+@media (max-width: 576px) {
+    .main-content-wrapper {
+        max-width: 95%;
+        padding: 5px;
+    }
+    
+    .pagination-center {
+        flex-wrap: wrap;
+        gap: 5px;
+    }
+}
+
+/* Ensure posts look good centered */
+.content-section {
+    margin-bottom: 30px;
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 }
 

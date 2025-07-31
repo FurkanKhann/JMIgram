@@ -1,0 +1,50 @@
+.content-section{
+  border-radius: 10px;
+  background-color: #282828;
+}
+
+.nav-link {
+    color: #bbe741 !important;
+}
+
+
+/* Active pagination button */
+.btn-info {
+    background-color: #bbe741 !important;
+    border-color: #bbe741 !important;
+}
+
+.btn-info:hover {
+    background-color: #a6d235 !important;
+    border-color: #a6d235 !important;
+}
+
+/* Inactive pagination buttons */
+.btn-outline-info {
+    border-color: #bbe741 !important;
+    background-color: transparent !important;
+}
+
+.btn-outline-info:hover {
+    background-color: #bbe741 !important;
+    border-color: #bbe741 !important;
+}
+
+
+.search-results .card {
+    background-color: #282828 !important;
+    border: 1px solid #bbe741 !important;
+}
+
+.search-results .card .card-body,
+.search-results .card .card-title,
+.search-results .card .card-title a,
+.search-results .card .badge {
+    color: white !important;
+}
+
+.search-results .card .card-title a:hover {
+    color: #bbe741 !important;
+}
+
+

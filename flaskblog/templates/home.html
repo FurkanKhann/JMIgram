@@ -1,13 +1,14 @@
 {% extends "layout.html" %}
 {% block content %}
+<div class="main-content-wrapper">
   {% for post in posts.items %}
   <article class="media content-section">
     <img class="rounded-circle article-img" src="{{ url_for('static', filename='profile_pic/' + post.author.image_file) }}">
     <div class="media-body">
       <div class="article-metadata">
         <a class="mr-2 name" href="{{ url_for('user_posts', username=post.author.username) }}">{{ post.author.username }}</a>
-        <small class="text-muted" style="color: white;">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
-        
+        <small class="text-muted" style="color: #bbe741 !important;">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
+
         <!-- Show "Under Review" badge for Police and Admin -->
         {% if post.is_under_review and current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police') %}
           <span class="badge badge-warning ml-2">Under Review</span>
@@ -54,23 +55,27 @@
 
       <!-- Show review warning for posts under review (Police/Admin only) -->
       {% if post.is_under_review and current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police') %}
-  <div class="alert mt-2" style="background-color: transparent; border: 1px solid rgba(255, 255, 255, 0.3);">
-    <small style="color: white; font-weight: bold;"><strong>Note:</strong> This post is under review and not visible to regular users.</small>
-  </div>
-{% endif %}
+        <div class="alert mt-2" style="background-color: transparent; border: 1px solid rgba(255, 255, 255, 0.3);">
+          <small style="color: white; font-weight: bold;"><strong>Note:</strong> This post is under review and not visible to regular users.</small>
+        </div>
+      {% endif %}
     </div>
   </article>
   {% endfor %}
 
-  {% for page_num in posts.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
-    {% if page_num %}
-      {% if posts.page == page_num %}
-        <a class="btn btn-info mb-4" href="{{ url_for('home', page=page_num) }}">{{ page_num }}</a>
+  <!-- Pagination -->
+  <div class="pagination-center">
+    {% for page_num in posts.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+      {% if page_num %}
+        {% if posts.page == page_num %}
+          <a class="btn btn-info mb-4 " href="{{ url_for('home', page=page_num) }}" style="color: white !important;">{{ page_num }}</a>
+        {% else %}
+          <a class="btn btn-outline-info mb-4 " href="{{ url_for('home', page=page_num) }}" style="color: white !important;">{{ page_num }}</a>
+        {% endif %}
       {% else %}
-        <a class="btn btn-outline-info mb-4" href="{{ url_for('home', page=page_num) }}">{{ page_num }}</a>
+        ...
       {% endif %}
-    {% else %}
-      ...
-    {% endif %}
-  {% endfor %}
+    {% endfor %}
+  </div>
+</div>
 {% endblock content %}
