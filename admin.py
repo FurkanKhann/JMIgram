@@ -6,13 +6,13 @@ with app.app_context():
     db.create_all()
 
     # Check if the admin user already exists
-    existing_user = User.query.filter_by(email='khanfurkan575@gmail.com').first()
+    existing_user = User.query.filter_by(email='first()
     if existing_user:
         print("Admin user already exists.")
         admin_user = existing_user
     else:
-        hashed_pw = bcrypt.generate_password_hash("Furkan@98").decode('utf-8')
-        admin_user = User(username="admin", email="khanfurkan575@gmail.com", password=hashed_pw, is_admin=True)
+        hashed_pw = bcrypt.generate_password_hash("").decode('utf-8')
+        admin_user = User(username="admin", email="", password=hashed_pw, is_admin=True)
         db.session.add(admin_user)
         db.session.commit()
         print("Admin user created successfully.")
