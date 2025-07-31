@@ -12,23 +12,6 @@
       <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
       <p class="article-content" style="color: white;">{{ post.content }}</p>
 
-      {# ✅ Show Gemini verification result #}
-      {% if post.gemini_verified == true %}
-        <p class="text-success"><strong>✅ News is verified by Gemini</strong></p>
-      {% elif post.gemini_verified == false %}
-        <p class="text-danger"><strong>⚠️ Gemini suggested this as fake</strong></p>
-      {% endif %}
-
-      <form method="POST" action="{{ url_for('like_post', post_id=post.id) }}">
-        <button class="btn btn-outline-success btn-sm" type="submit">👍 Like ({{ post.likes_count() }})</button>
-      </form>
-      <form method="POST" action="{{ url_for('report_post', post_id=post.id) }}">
-        <button class="btn btn-outline-danger btn-sm mt-1" type="submit">🚩 Report ({{ post.reports_count() }})</button>
-      </form>
-
-      {% if post.reports_count() > post.likes_count() %}
-        <p class="text-warning mt-2"><strong>⚠️ High chance of fake news</strong></p>
-      {% endif %}
     </div>
   </article>
   {% endfor %}

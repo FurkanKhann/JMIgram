@@ -2,31 +2,62 @@
 {% block content %}
   {% for post in posts.items %}
   <article class="media content-section">
-    <img class="rounded-circle article-img" src="{{ url_for('static',filename='profile_pic/'+post.author.image_file) }}">
+    <img class="rounded-circle article-img" src="{{ url_for('static', filename='profile_pic/' + post.author.image_file) }}">
     <div class="media-body">
       <div class="article-metadata">
         <a class="mr-2 name" href="{{ url_for('user_posts', username=post.author.username) }}">{{ post.author.username }}</a>
         <small class="text-muted" style="color: white;">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
+        
+        <!-- Show "Under Review" badge for Police and Admin -->
+        {% if post.is_under_review and current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police') %}
+          <span class="badge badge-warning ml-2">Under Review</span>
+        {% endif %}
       </div>
-      <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
-      <p class="article-content" style="color: white;">{{ post.content }}</p>
-
-      {% if post.gemini_verified == True %}
-        <p class="text-success"><strong>✅ News is verified by Gemini</strong></p>
-      {% elif post.gemini_verified == False %}
-        <p class="text-danger"><strong>⚠️ Gemini suggested this as fake</strong></p>
+      <h2>
+        <a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a>
+      </h2>
+      
+      <!-- Display post image if exists -->
+      {% if post.image_file %}
+        <div class="mb-3">
+          <img src="{{ url_for('static', filename='post_images/' + post.image_file) }}" 
+               class="img-fluid rounded" alt="Post image" 
+               style="max-width: 100%; height: auto; max-height: 400px; object-fit: cover;">
+        </div>
+      {% endif %}
+      
+      <!-- Display post content if exists -->
+      {% if post.content %}
+        <p class="article-content" style="color: white;">{{ post.content }}</p>
       {% endif %}
 
-      <form method="POST" action="{{ url_for('like_post', post_id=post.id) }}">
-        <button class="btn btn-outline-success btn-sm" type="submit">👍 Like ({{ post.likes_count() }})</button>
-      </form>
-      <form method="POST" action="{{ url_for('report_post', post_id=post.id) }}">
-        <button class="btn btn-outline-danger btn-sm mt-1" type="submit">🚩 Report ({{ post.reports_count() }})</button>
-      </form>
+      <!-- Review System Actions -->
+      {% if current_user.is_authenticated and (current_user.is_admin or current_user.role in ['Police', 'Reviewer']) %}
+        <div class="mt-2">
+          <!-- Mark for Review button - only for Reviewers on posts not under review -->
+          {% if current_user.role == 'Reviewer' and not post.is_under_review %}
+            <form action="{{ url_for('mark_for_review', post_id=post.id) }}" method="POST" style="display:inline">
+              {{ form.hidden_tag() }}
+              <button type="submit" class="btn btn-warning btn-sm">Mark for Review</button>
+            </form>
+          {% endif %}
 
-      {% if post.reports_count() > post.likes_count() %}
-        <p class="text-warning mt-2"><strong>⚠️ High chance of fake news</strong></p>
+          <!-- Approve button - only for Police/Admin on posts under review -->
+          {% if (current_user.is_admin or current_user.role == 'Police') and post.is_under_review %}
+            <form action="{{ url_for('unmark_for_review', post_id=post.id) }}" method="POST" style="display:inline">
+              {{ form.hidden_tag() }}
+              <button type="submit" class="btn btn-success btn-sm">Approve & Show</button>
+            </form>
+          {% endif %}
+        </div>
       {% endif %}
+
+      <!-- Show review warning for posts under review (Police/Admin only) -->
+      {% if post.is_under_review and current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police') %}
+  <div class="alert mt-2" style="background-color: transparent; border: 1px solid rgba(255, 255, 255, 0.3);">
+    <small style="color: white; font-weight: bold;"><strong>Note:</strong> This post is under review and not visible to regular users.</small>
+  </div>
+{% endif %}
     </div>
   </article>
   {% endfor %}

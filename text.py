@@ -1,9 +1,11 @@
-# create_db.py
-
 from flaskblog import db, app
+from flaskblog.models import User
+from werkzeug.security import generate_password_hash
 
-# Recreate database from models by dropping and creating tables
+
+
 with app.app_context():
-    db.drop_all()
     db.create_all()
-    print("✅ Database dropped and recreated successfully!")
+    print("succesful")
+
+

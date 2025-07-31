@@ -93,7 +93,15 @@ a.article-title:hover {
   background: black;
 }
 
-
+.myclr {
+  color: black !important;
+  font-size: 16px; /* or any size you prefer */
+  text-decoration: none;
+}
+.myclr:hover {
+  color: black !important;
+  text-decoration: underline;
+}
 
 .name{
   color: white;
@@ -105,3 +113,4 @@ a.article-title:hover {
 .bg-steel{
   background: #333;
 }
+

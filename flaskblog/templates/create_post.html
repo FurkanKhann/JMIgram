@@ -1,39 +1,56 @@
-{% extends "layout.html" %} {% block content %}
+{% extends "layout.html" %} 
+{% block content %}
 <div class="content-section">
-  <form method="POST" action="">
+  <form method="POST" action="" enctype="multipart/form-data">
     {{ form.hidden_tag() }}
     <fieldset class="form-group">
       <legend class="border-bottom mb-4" style="color: white;">{{ legend }}</legend>
 
-      <!-- Email -->
+      <!-- Title -->
       <div class="form-group">
-        {{ form.title.label(class="form-control-label") }} {% if
-        form.title.errors %} {{ form.title(class="form-control form-control-lg
-        is-invalid") }}
-        <div class="invalid-feedback">
-          {% for error in form.title.errors %}
-          <span>{{ error }}</span>
-          {% endfor %}
-        </div>
-        {% else %} {{ form.title(class="form-control form-control-lg") }} {%
-        endif %}
+        {{ form.title.label(class="form-control-label") }} 
+        {% if form.title.errors %} 
+          {{ form.title(class="form-control form-control-lg is-invalid") }}
+          <div class="invalid-feedback">
+            {% for error in form.title.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+        {% else %} 
+          {{ form.title(class="form-control form-control-lg") }} 
+        {% endif %}
       </div>
 
-      <!-- Password -->
+      <!-- Content -->
       <div class="form-group">
-        {{ form.content.label(class="form-control-label") }} {% if
-        form.content.errors %} {{ form.content(class="form-control
-        form-control-lg is-invalid") }}
-        <div class="invalid-feedback">
-          {% for error in form.content.errors %}
-          <span>{{ error }}</span>
-          {% endfor %}
-        </div>
-        {% else %} {{ form.content(class="form-control form-control-lg") }} {%
-        endif %}
+        {{ form.content.label(class="form-control-label") }} 
+        {% if form.content.errors %} 
+          {{ form.content(class="form-control form-control-lg is-invalid", rows="5") }}
+          <div class="invalid-feedback">
+            {% for error in form.content.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+        {% else %} 
+          {{ form.content(class="form-control form-control-lg", rows="5") }} 
+        {% endif %}
       </div>
 
-     
+      <!-- Image Upload -->
+      <div class="form-group">
+        {{ form.image.label(class="form-control-label") }}
+        {% if form.image.errors %}
+          {{ form.image(class="form-control-file is-invalid") }}
+          <div class="invalid-feedback">
+            {% for error in form.image.errors %}
+            <span>{{ error }}</span>
+            {% endfor %}
+          </div>
+        {% else %}
+          {{ form.image(class="form-control-file") }}
+        {% endif %}
+        <small class="form-text text-muted">Optional: Upload an image for your post (JPG, PNG formats supported)</small>
+      </div>
     </fieldset>
 
     <div class="form-group mt-3">

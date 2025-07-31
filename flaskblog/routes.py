@@ -4,12 +4,17 @@ from PIL import Image
 from flask import render_template, url_for, flash, redirect, request, abort
 from flaskblog import app, db, bcrypt, mail
 from flaskblog.forms import (RegistrationForm, LoginForm, UpdateAccountForm,
-                             PostForm, RequestResetForm, ResetPasswordForm)
+                             PostForm, RequestResetForm, ResetPasswordForm,UserRoleForm, EmptyForm)
 from flaskblog.models import User, Post
 from flask_login import login_user, current_user, logout_user, login_required
 from flask_mail import Message
 import google.generativeai as genai
 from dotenv import load_dotenv
+from sqlalchemy import or_, and_
+
+
+
+
 # Load environment variables
 load_dotenv()
 
@@ -24,11 +29,15 @@ model = genai.GenerativeModel("gemini-2.5-flash")
 @app.route("/")
 @app.route("/home")
 def home():
+    form = EmptyForm()  # Add this line
     page = request.args.get('page', 1, type=int)
-    posts = Post.query.order_by(Post.date_posted.desc()).paginate(page=page, per_page=5)
-    return render_template('home.html', posts=posts)
-
-
+    if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police'):
+        # Police and Admin see all posts
+        posts = Post.query.order_by(Post.date_posted.desc()).paginate(page=page, per_page=5)
+    else:
+        # Everyone else: exclude posts under review
+        posts = Post.query.filter_by(is_under_review=False).order_by(Post.date_posted.desc()).paginate(page=page, per_page=5)
+    return render_template('home.html', posts=posts, form=form) 
 @app.route("/about")
 def about():
     return render_template('about.html', title='About')
@@ -67,6 +76,94 @@ If you did not make this request, simply ignore this email.
 
 
 # ---------------------- AUTH ROUTES ----------------------
+
+@app.route("/search")
+def search():
+    query = request.args.get('q', '')
+    page = request.args.get('page', 1, type=int)
+    
+    if not query:
+        return render_template('search.html', query='', users=[], posts=[], total_results=0)
+    
+    # Search users
+    users = User.query.filter(
+        or_(
+            User.username.ilike(f'%{query}%'),
+            User.email.ilike(f'%{query}%')
+        )
+    ).limit(10).all()
+    
+    # Search posts (exclude posts under review for non-privileged users)
+    if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police'):
+        # Police and Admin see all posts including under review
+        posts = Post.query.filter(
+            or_(
+                Post.title.ilike(f'%{query}%'),
+                Post.content.ilike(f'%{query}%')
+            )
+        ).order_by(Post.date_posted.desc()).paginate(page=page, per_page=10)
+    else:
+        # Regular users don't see posts under review
+        posts = Post.query.filter(
+            and_(
+                Post.is_under_review == False,
+                or_(
+                    Post.title.ilike(f'%{query}%'),
+                    Post.content.ilike(f'%{query}%')
+                )
+            )
+        ).order_by(Post.date_posted.desc()).paginate(page=page, per_page=10)
+    
+    total_results = len(users) + posts.total
+    form = EmptyForm()
+    
+    return render_template('search.html', 
+                         query=query, 
+                         users=users, 
+                         posts=posts, 
+                         total_results=total_results,
+                         form=form)
+
+@app.route("/search/ajax")
+def search_ajax():
+    """AJAX endpoint for real-time search suggestions"""
+    query = request.args.get('q', '')
+    
+    if len(query) < 2:
+        return {'users': [], 'posts': []}
+    
+    # Search users (limit to 5 for suggestions)
+    users = User.query.filter(
+        or_(
+            User.username.ilike(f'%{query}%'),
+            User.email.ilike(f'%{query}%')
+        )
+    ).limit(5).all()
+    
+    # Search posts (limit to 5 for suggestions)
+    if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police'):
+        posts = Post.query.filter(
+            or_(
+                Post.title.ilike(f'%{query}%'),
+                Post.content.ilike(f'%{query}%')
+            )
+        ).order_by(Post.date_posted.desc()).limit(5).all()
+    else:
+        posts = Post.query.filter(
+            and_(
+                Post.is_under_review == False,
+                or_(
+                    Post.title.ilike(f'%{query}%'),
+                    Post.content.ilike(f'%{query}%')
+                )
+            )
+        ).order_by(Post.date_posted.desc()).limit(5).all()
+    
+    return {
+        'users': [{'id': u.id, 'username': u.username, 'image_file': u.image_file} for u in users],
+        'posts': [{'id': p.id, 'title': p.title, 'author': p.author.username} for p in posts]
+    }
+
 
 @app.route("/register", methods=['GET', 'POST'])
 def register():
@@ -166,50 +263,58 @@ def reset_token(token):
 
 
 # ---------------------- POST ROUTES ----------------------
+def save_post_image(form_image):
+    """Save uploaded post image and return filename"""
+    random_hex = secrets.token_hex(8)
+    _, f_ext = os.path.splitext(form_image.filename)
+    image_filename = random_hex + f_ext
+    image_path = os.path.join(app.root_path, 'static/post_images', image_filename)
+    
+    # Create directory if it doesn't exist
+    os.makedirs(os.path.dirname(image_path), exist_ok=True)
+    
+    # Resize image to reasonable size
+    output_size = (800, 600)
+    img = Image.open(form_image)
+    img.thumbnail(output_size)
+    img.save(image_path)
+    return image_filename
 
-def verify_post_with_gemini(post_content):
-    prompt = f"""You are a fact-checking AI assistant. Given the following post content, 
-    respond with only `true` if the news seems likely to be true, or `false` if it seems fake. 
-    Be concise and do not include explanations.
-
-    Post: "{post_content}"
-    Is this news likely true or fake? (Only respond `true` or `false`)
-    """
-    try:
-        response = model.generate_content(prompt)
-        verdict = response.text.strip().lower()
-        if 'true' in verdict:
-            return True
-        elif 'false' in verdict:
-            return False
-    except Exception as e:
-        print("Gemini API Error:", e)
-    return None  # In case of error
 
 @app.route("/post/new", methods=['GET', 'POST'])
 @login_required
 def new_post():
     form = PostForm()
     if form.validate_on_submit():
-        post = Post(title=form.title.data, content=form.content.data, author=current_user)
+        image_file = None
+        if form.image.data:
+            image_file = save_post_image(form.image.data)
+        
+        post = Post(
+            title=form.title.data, 
+            content=form.content.data,
+            image_file=image_file,
+            author=current_user
+        )
         db.session.add(post)
         db.session.commit()
-
-        # Run Gemini verification after post creation
-        verified = verify_post_with_gemini(post.content)
-        post.gemini_verified = verified
-        db.session.commit()
-
         flash('Post created!', 'success')
         return redirect(url_for('home'))
     return render_template('create_post.html', title='New Post', form=form, legend='New Post')
 
 
 
+
 @app.route("/post/<int:post_id>")
 def post(post_id):
     post = Post.query.get_or_404(post_id)
-    return render_template('post.html', title=post.title, post=post)
+    # Hide under-review post unless Police/Admin
+    if post.is_under_review and not (current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police')):
+        abort(404)
+    form = EmptyForm()
+    return render_template('post.html', title=post.title, post=post, form=form)
+
+
 
 
 @app.route("/post/<int:post_id>/update", methods=['GET', 'POST'])
@@ -222,13 +327,7 @@ def update_post(post_id):
     if form.validate_on_submit():
         post.title = form.title.data
         post.content = form.content.data
-
-        # Re-run Gemini verification after update
-        verified = verify_post_with_gemini(post.content)
-        post.gemini_verified = verified
-
         db.session.commit()
-        flash('Your post has been updated and re-verified!', 'success')
         return redirect(url_for('post', post_id=post.id))
     elif request.method == 'GET':
         form.title.data = post.title
@@ -242,12 +341,31 @@ def update_post(post_id):
 @login_required
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
-    if post.author != current_user:
+    
+    # Allow deletion if user is:
+    # 1. The author of the post, OR
+    # 2. An admin, OR  
+    # 3. Has Police or Reviewer role
+    if (post.author != current_user and 
+        not current_user.is_admin and 
+        current_user.role not in ['Police']):
         abort(403)
+    
+    # Store post details for flash message
+    post_title = post.title
+    post_author = post.author.username
+    
     db.session.delete(post)
     db.session.commit()
-    flash('Your post has been deleted!', 'success')
+    
+    # Different flash messages based on who deleted the post
+    if post.author == current_user:
+        flash('Your post has been deleted!', 'success')
+    else:
+        flash(f'Post "{post_title}" by {post_author} has been deleted by {current_user.role}.', 'warning')
+    
     return redirect(url_for('home'))
+
 
 
 @app.route("/like/<int:post_id>", methods=["POST"])
@@ -274,4 +392,95 @@ def report_post(post_id):
         post.reported_by.append(current_user)  # Report
         flash("Post reported", "warning")
     db.session.commit()
+    return redirect(request.referrer or url_for('home'))
+
+#-------------------ADMIN ROUTES-------------------
+
+
+@app.route("/admin/users", methods=['GET'])
+@login_required
+def admin_users():
+    # Check if current user is admin
+    if not current_user.is_admin:
+        abort(403)
+    
+    page = request.args.get('page', 1, type=int)
+    users = User.query.paginate(page=page, per_page=10)
+    return render_template('admin_users.html', title='Manage Users', users=users)
+
+@app.route("/admin/user/<int:user_id>/role", methods=['GET', 'POST'])
+@login_required
+def update_user_role(user_id):
+    # Check if current user is admin
+    if not current_user.is_admin:
+        abort(403)
+    
+    user = User.query.get_or_404(user_id)
+    
+    # Prevent admin from changing their own role
+    if user == current_user:
+        flash('You cannot change your own role!', 'warning')
+        return redirect(url_for('admin_users'))
+    
+    form = UserRoleForm()
+    
+    if form.validate_on_submit():
+        old_role = user.role
+        user.role = form.role.data
+        db.session.commit()
+        flash(f'User {user.username} role updated from {old_role} to {user.role}!', 'success')
+        return redirect(url_for('admin_users'))
+    
+    elif request.method == 'GET':
+        form.role.data = user.role
+    
+    return render_template('update_user_role.html', title='Update User Role', 
+                         form=form, user=user)
+
+@app.route("/admin/user/<int:user_id>/toggle_admin", methods=['POST'])
+@login_required
+def toggle_admin_status(user_id):
+    # Check if current user is admin
+    if not current_user.is_admin:
+        abort(403)
+    
+    user = User.query.get_or_404(user_id)
+    
+    # Prevent admin from removing their own admin status
+    if user == current_user:
+        flash('You cannot change your own admin status!', 'warning')
+        return redirect(url_for('admin_users'))
+    
+    user.is_admin = not user.is_admin
+    db.session.commit()
+    
+    status = "granted" if user.is_admin else "revoked"
+    flash(f'Admin privileges {status} for user {user.username}!', 'success')
+    
+    return redirect(url_for('admin_users'))
+
+
+
+
+@app.route("/mark_for_review/<int:post_id>", methods=['POST'])
+@login_required
+def mark_for_review(post_id):
+    post = Post.query.get_or_404(post_id)
+    if not current_user.role == 'Reviewer':
+        abort(403)
+    post.is_under_review = True
+    db.session.commit()
+    flash("Post marked for review!", "info")
+    return redirect(request.referrer or url_for('home'))
+
+@app.route("/unmark_for_review/<int:post_id>", methods=['POST'])
+@login_required
+def unmark_for_review(post_id):
+    post = Post.query.get_or_404(post_id)
+    # Only Police or Admin can unmark
+    if not (current_user.is_admin or current_user.role == 'Police'):
+        abort(403)
+    post.is_under_review = False
+    db.session.commit()
+    flash("Post has been reviewed and is now visible!", "success")
     return redirect(request.referrer or url_for('home'))

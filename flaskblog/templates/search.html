@@ -1,0 +1,217 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="container">
+    <!-- Search Bar -->
+    <div class="row justify-content-center mb-4">
+        <div class="col-md-8">
+            <div class="search-container position-relative">
+                <form method="GET" action="{{ url_for('search') }}">
+                    <div class="input-group">
+                        <input type="text" 
+                               class="form-control form-control-lg" 
+                               name="q" 
+                               id="searchInput"
+                               value="{{ query }}" 
+                               placeholder="Search for users or posts..." 
+                               autocomplete="off">
+                        <div class="input-group-append">
+                            <button class="btn btn-primary" type="submit">
+                                <i class="fas fa-search"></i> Search
+                            </button>
+                        </div>
+                    </div>
+                </form>
+                
+                <!-- Live Search Suggestions -->
+                <div id="searchSuggestions" class="search-suggestions position-absolute w-100" style="display: none; z-index: 1000; background: white; border: 1px solid #ddd; border-top: none; max-height: 400px; overflow-y: auto;">
+                </div>
+            </div>
+        </div>
+    </div>
+
+    {% if query %}
+        <div class="search-results">
+            <h3 style="color: white;">Search Results for "{{ query }}" ({{ total_results }} results)</h3>
+            
+            <!-- Users Section -->
+            {% if users %}
+                <div class="mb-4">
+                    <h4 style="color: white;">Users</h4>
+                    <div class="row">
+                        {% for user in users %}
+                            <div class="col-md-6 col-lg-4 mb-3">
+                                <div class="card">
+                                    <div class="card-body d-flex align-items-center">
+                                        <img src="{{ url_for('static', filename='profile_pic/' + user.image_file) }}" 
+                                             class="rounded-circle mr-3" 
+                                             style="width: 50px; height: 50px; object-fit: cover;">
+                                        <div>
+                                            <h6 class="card-title mb-0">
+                                                <a href="{{ url_for('user_posts', username=user.username) }}">
+                                                    {{ user.username }}
+                                                </a>
+                                            </h6>
+                                            
+                                            <br>
+                                            <span class="badge badge-{% if user.role == 'Police' %}danger{% elif user.role == 'Reviewer' %}warning{% else %}secondary{% endif %} badge-sm">
+                                                {{ user.role }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endif %}
+
+            <!-- Posts Section -->
+            {% if posts.items %}
+                <div class="mb-4">
+                    <h4 style="color: white;">Posts</h4>
+                    {% for post in posts.items %}
+                        <article class="media content-section">
+                            <img class="rounded-circle article-img" 
+                                 src="{{ url_for('static', filename='profile_pic/' + post.author.image_file) }}">
+                            <div class="media-body">
+                                <div class="article-metadata">
+                                    <a class="mr-2 name" href="{{ url_for('user_posts', username=post.author.username) }}">
+                                        {{ post.author.username }}
+                                    </a>
+                                    <small class="text-muted" style="color: white;">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
+                                    
+                                    <!-- Show "Under Review" badge for Police and Admin -->
+                                    {% if post.is_under_review and current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police') %}
+                                        <span class="badge badge-warning ml-2">Under Review</span>
+                                    {% endif %}
+                                </div>
+                                <h2>
+                                    <a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a>
+                                </h2>
+                                
+                                <!-- Display post image if exists -->
+                                {% if post.image_file %}
+                                    <div class="mb-3">
+                                        <img src="{{ url_for('static', filename='post_images/' + post.image_file) }}" 
+                                             class="img-fluid rounded" alt="Post image" 
+                                             style="max-width: 100%; height: auto; max-height: 300px; object-fit: cover;">
+                                    </div>
+                                {% endif %}
+                                
+                                <!-- Display post content if exists -->
+                                {% if post.content %}
+                                    <p class="article-content" style="color: white;">
+                                        {{ post.content[:200] }}{% if post.content|length > 200 %}...{% endif %}
+                                    </p>
+                                {% endif %}
+                            </div>
+                        </article>
+                    {% endfor %}
+
+                    <!-- Pagination for Posts -->
+                    {% if posts.pages > 1 %}
+                        {% for page_num in posts.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+                            {% if page_num %}
+                                {% if posts.page == page_num %}
+                                    <a class="btn btn-info mb-4" href="{{ url_for('search', q=query, page=page_num) }}">{{ page_num }}</a>
+                                {% else %}
+                                    <a class="btn btn-outline-info mb-4" href="{{ url_for('search', q=query, page=page_num) }}">{{ page_num }}</a>
+                                {% endif %}
+                            {% else %}
+                                ...
+                            {% endif %}
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            {% endif %}
+
+            {% if not users and not posts.items %}
+                <div class="text-center mt-5">
+                    <h4 style="color: white;">No results found for "{{ query }}"</h4>
+                    <p style="color: #ccc;">Try searching with different keywords.</p>
+                </div>
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+
+<!-- JavaScript for Live Search -->
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const searchInput = document.getElementById('searchInput');
+    const suggestionsDiv = document.getElementById('searchSuggestions');
+    let searchTimeout;
+
+    searchInput.addEventListener('input', function() {
+        const query = this.value.trim();
+        
+        // Clear previous timeout
+        clearTimeout(searchTimeout);
+        
+        if (query.length < 2) {
+            suggestionsDiv.style.display = 'none';
+            return;
+        }
+
+        // Debounce search
+        searchTimeout = setTimeout(() => {
+            fetch('/search/ajax?q=' + encodeURIComponent(query))
+                .then(response => response.json())
+                .then(data => {
+                    displaySuggestions(data.users, data.posts, query);
+                })
+                .catch(error => console.error('Search error:', error));
+        }, 300);
+    });
+
+    function displaySuggestions(users, posts, query) {
+        let html = '';
+        
+        if (users.length > 0) {
+            html += '<div class="p-2"><strong>Users</strong></div>';
+            users.forEach(user => {
+                html += `
+                    <a href="/user/${user.username}" class="d-block p-2 text-decoration-none border-bottom">
+                        <div class="d-flex align-items-center">
+                            <img src="/static/profile_pic/${user.image_file}" 
+                                 class="rounded-circle mr-2" style="width: 30px; height: 30px; object-fit: cover;">
+                            <span style="color: black;">${user.username}</span>
+                        </div>
+                    </a>
+                `;
+            });
+        }
+        
+        if (posts.length > 0) {
+            html += '<div class="p-2"><strong>Posts</strong></div>';
+            posts.forEach(post => {
+                html += `
+                    <a href="/post/${post.id}" class="d-block p-2 text-decoration-none border-bottom">
+                        <div style="color: black;">
+                            <strong>${post.title}</strong><br>
+                            <small class="text-muted">by ${post.author}</small>
+                        </div>
+                    </a>
+                `;
+            });
+        }
+        
+        if (users.length === 0 && posts.length === 0) {
+            html = '<div class="p-2 text-muted">No suggestions found</div>';
+        }
+        
+        html += '<a href="/search?q=' + encodeURIComponent(query) + '" class="d-block p-2 text-center bg-light"><strong>See all results</strong></a>';
+        
+        suggestionsDiv.innerHTML = html;
+        suggestionsDiv.style.display = 'block';
+    }
+
+    // Hide suggestions when clicking outside
+    document.addEventListener('click', function(event) {
+        if (!event.target.closest('.search-container')) {
+            suggestionsDiv.style.display = 'none';
+        }
+    });
+});
+</script>
+{% endblock content %}
