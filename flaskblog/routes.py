@@ -5,7 +5,7 @@ from flask import render_template, url_for, flash, redirect, request, abort, jso
 from flaskblog import app, db, bcrypt, mail
 from flaskblog.forms import (RegistrationForm, LoginForm, UpdateAccountForm,
                              PostForm, RequestResetForm, ResetPasswordForm, UserRoleForm, EmptyForm)
-from flaskblog.models import User, Post, Like, Comment
+from flaskblog.models import User, Post, Like, Comment, Notification
 from flask_login import login_user, current_user, logout_user, login_required
 from flask_mail import Message
 import google.generativeai as genai
@@ -17,8 +17,6 @@ load_dotenv()
 
 # Configure Gemini with your API key
 genai.configure(api_key=os.getenv('API_KEY'))
-
-# Load the model
 model = genai.GenerativeModel("gemini-2.5-flash")
 
 # =====================================
@@ -36,7 +34,6 @@ def save_picture(form_picture):
     i = Image.open(form_picture)
     i.thumbnail(output_size)
     i.save(picture_path)
-
     return picture_fn
 
 def save_post_image(form_image):
@@ -46,15 +43,63 @@ def save_post_image(form_image):
     image_filename = random_hex + f_ext
     image_path = os.path.join(app.root_path, 'static/post_images', image_filename)
     
-    # Create directory if it doesn't exist
     os.makedirs(os.path.dirname(image_path), exist_ok=True)
     
-    # Resize image to reasonable size
     output_size = (800, 600)
     img = Image.open(form_image)
     img.thumbnail(output_size)
     img.save(image_path)
     return image_filename
+
+def create_notification(user_id, notification_type, message, related_post_id=None, related_user_id=None):
+    """Create a new notification"""
+    notification = Notification(
+        user_id=user_id,
+        type=notification_type,
+        message=message,
+        related_post_id=related_post_id,
+        related_user_id=related_user_id
+    )
+    db.session.add(notification)
+    db.session.commit()
+
+def send_verification_email(user):
+    """Send email verification email"""
+    token = user.generate_verification_token()
+    msg = Message(
+        'Verify Your Email - JMIgram',
+        sender='noreply@jmigram.com',
+        recipients=[user.email]
+    )
+    msg.body = f'''Welcome to JMIgram!
+
+Please click the following link to verify your email address and activate your account:
+{url_for('verify_email', token=token, _external=True)}
+
+This link will expire in 1 hour.
+
+If you did not create this account, please ignore this email.
+
+Best regards,
+JMIgram Team
+'''
+    msg.html = f'''
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #bbe741;">Welcome to JMIgram!</h2>
+        <p>Thank you for signing up. Please verify your email address to activate your account.</p>
+        <div style="text-align: center; margin: 30px 0;">
+            <a href="{url_for('verify_email', token=token, _external=True)}" 
+               style="background-color: #bbe741; color: black; padding: 12px 30px; text-decoration: none; border-radius: 5px; font-weight: bold;">
+               Verify Email Address
+            </a>
+        </div>
+        <p><strong>Note:</strong> This link will expire in 1 hour.</p>
+        <p>If you did not create this account, please ignore this email.</p>
+        <hr>
+        <p style="color: #666; font-size: 12px;">JMIgram Team</p>
+    </div>
+    '''
+    mail.send(msg)
 
 def send_reset_email(user):
     """Send password reset email"""
@@ -72,7 +117,20 @@ If you did not make this request, simply ignore this email.
     mail.send(msg)
 
 # =====================================
-# HOME & BASIC PAGES
+# MIDDLEWARE & BEFORE REQUEST HANDLERS
+# =====================================
+
+@app.before_request
+def check_email_verification():
+    """Check if user has verified their email before accessing protected routes"""
+    if (current_user.is_authenticated and 
+        not current_user.email_verified and 
+        request.endpoint not in ['verify_email', 'resend_verification', 'logout', 'static', 'verify_email_prompt']):
+        flash('Please verify your email address to access this feature.', 'warning')
+        return redirect(url_for('verify_email_prompt'))
+
+# =====================================
+# MAIN PAGE ROUTES
 # =====================================
 
 @app.route("/")
@@ -83,10 +141,8 @@ def home():
     page = request.args.get('page', 1, type=int)
     
     if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police'):
-        # Police and Admin see all posts including under review
         posts = Post.query.order_by(Post.date_posted.desc()).paginate(page=page, per_page=5)
     else:
-        # Regular users: exclude posts under review
         posts = Post.query.filter_by(is_under_review=False).order_by(Post.date_posted.desc()).paginate(page=page, per_page=5)
     
     return render_template('home.html', posts=posts, form=form)
@@ -103,10 +159,21 @@ def register():
     form = RegistrationForm()
     if form.validate_on_submit():
         hashed_password = bcrypt.generate_password_hash(form.password.data).decode('utf-8')
-        user = User(username=form.username.data, email=form.email.data, password=hashed_password)
+        user = User(
+            username=form.username.data, 
+            email=form.email.data, 
+            password=hashed_password,
+            email_verified=False
+        )
         db.session.add(user)
         db.session.commit()
-        flash('Your account has been created! You are now able to log in', 'success')
+        
+        try:
+            send_verification_email(user)
+            flash(f'Account created! Please check your email ({user.email}) to verify your account before logging in.', 'info')
+        except Exception as e:
+            flash('Account created but verification email could not be sent. Please contact support.', 'warning')
+            
         return redirect(url_for('login'))
     
     return render_template('register.html', title='Register', form=form)
@@ -120,6 +187,10 @@ def login():
     if form.validate_on_submit():
         user = User.query.filter_by(email=form.email.data).first()
         if user and bcrypt.check_password_hash(user.password, form.password.data):
+            if not user.email_verified:
+                flash('Please verify your email address before logging in. Check your inbox or request a new verification email.', 'warning')
+                return redirect(url_for('resend_verification'))
+            
             login_user(user, remember=form.remember.data)
             next_page = request.args.get('next')
             return redirect(next_page) if next_page else redirect(url_for('home'))
@@ -132,6 +203,67 @@ def login():
 def logout():
     logout_user()
     return redirect(url_for('home'))
+
+# =====================================
+# EMAIL VERIFICATION ROUTES
+# =====================================
+
+@app.route("/verify_email/<token>")
+def verify_email(token):
+    """Verify email address using token"""
+    if current_user.is_authenticated and current_user.email_verified:
+        flash('Your email is already verified!', 'info')
+        return redirect(url_for('home'))
+    
+    user = User.verify_email_token(token)
+    if user is None:
+        flash('Invalid or expired verification token. Please request a new one.', 'danger')
+        return redirect(url_for('resend_verification'))
+    
+    user.email_verified = True
+    user.verification_token = None
+    user.token_created_at = None
+    db.session.commit()
+    
+    flash('Email verified successfully! You can now log in and use all features.', 'success')
+    return redirect(url_for('login'))
+
+@app.route("/verify_email_prompt")
+def verify_email_prompt():
+    """Show page prompting user to verify email"""
+    if not current_user.is_authenticated:
+        return redirect(url_for('login'))
+    
+    if current_user.email_verified:
+        return redirect(url_for('home'))
+    
+    return render_template('verify_email_prompt.html', title='Verify Email')
+
+@app.route("/resend_verification", methods=['GET', 'POST'])
+def resend_verification():
+    """Resend verification email"""
+    if current_user.is_authenticated and current_user.email_verified:
+        flash('Your email is already verified!', 'info')
+        return redirect(url_for('home'))
+    
+    form = RequestResetForm()
+    if form.validate_on_submit():
+        user = User.query.filter_by(email=form.email.data).first()
+        if user:
+            if user.email_verified:
+                flash('This email is already verified!', 'info')
+            else:
+                try:
+                    send_verification_email(user)
+                    flash('Verification email sent! Please check your inbox.', 'info')
+                except Exception as e:
+                    flash('Could not send verification email. Please try again later.', 'danger')
+        else:
+            flash('No account found with that email address.', 'danger')
+        
+        return redirect(url_for('login'))
+    
+    return render_template('resend_verification.html', title='Resend Verification', form=form)
 
 # =====================================
 # PASSWORD RESET ROUTES
@@ -172,7 +304,7 @@ def reset_token(token):
     return render_template('reset_token.html', title='Reset Password', form=form)
 
 # =====================================
-# USER ACCOUNT ROUTES
+# USER PROFILE & ACCOUNT ROUTES
 # =====================================
 
 @app.route("/account", methods=['GET', 'POST'])
@@ -231,7 +363,6 @@ def new_post():
 @app.route("/post/<int:post_id>")
 def post(post_id):
     post = Post.query.get_or_404(post_id)
-    # Hide under-review post unless Police/Admin
     if post.is_under_review and not (current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police')):
         abort(404)
     
@@ -263,21 +394,29 @@ def update_post(post_id):
 def delete_post(post_id):
     post = Post.query.get_or_404(post_id)
     
-    # Allow deletion if user is: author, admin, or Police role
     if (post.author != current_user and 
         not current_user.is_admin and 
         current_user.role not in ['Police']):
         abort(403)
     
-    # Store post details for flash message
     post_title = post.title
+    post_author_id = post.author.id
     post_author = post.author.username
+    
+    # Create notification for post author (if deleted by someone else)
+    if post.author != current_user:
+        role_name = "Admin" if current_user.is_admin else current_user.role
+        create_notification(
+            user_id=post_author_id,
+            notification_type='post_deleted',
+            message=f"Your post '{post_title}' has been deleted by {role_name}",
+            related_user_id=current_user.id
+        )
     
     db.session.delete(post)
     db.session.commit()
     
-    # Different flash messages based on who deleted the post
-    if post.author == current_user:
+    if post_author_id == current_user.id:
         flash('Your post has been deleted!', 'success')
     else:
         flash(f'Post "{post_title}" by {post_author} has been deleted by {current_user.role}.', 'warning')
@@ -285,33 +424,35 @@ def delete_post(post_id):
     return redirect(url_for('home'))
 
 # =====================================
-# LIKE & COMMENT ROUTES
+# LIKE & COMMENT INTERACTION ROUTES
 # =====================================
 
 @app.route("/like_post/<int:post_id>", methods=['POST'])
 @login_required
 def like_post(post_id):
     post = Post.query.get_or_404(post_id)
-    
-    # Check if user already liked this post
     existing_like = Like.query.filter_by(user_id=current_user.id, post_id=post_id).first()
     
     if existing_like:
-        # Unlike the post
         db.session.delete(existing_like)
         liked = False
     else:
-        # Like the post
         like = Like(user_id=current_user.id, post_id=post_id)
         db.session.add(like)
         liked = True
+        
+        # Create notification for post author (only if someone else liked their post)
+        if post.author != current_user:
+            create_notification(
+                user_id=post.author.id,
+                notification_type='like',
+                message=f"{current_user.username} liked your post '{post.title}'",
+                related_post_id=post_id,
+                related_user_id=current_user.id
+            )
     
     db.session.commit()
-    
-    return jsonify({
-        'liked': liked,
-        'like_count': post.get_like_count()
-    })
+    return jsonify({'liked': liked, 'like_count': post.get_like_count()})
 
 @app.route("/add_comment/<int:post_id>", methods=['POST'])
 @login_required
@@ -322,6 +463,17 @@ def add_comment(post_id):
     if content:
         comment = Comment(content=content, user_id=current_user.id, post_id=post_id)
         db.session.add(comment)
+        
+        # Create notification for post author (only if someone else commented)
+        if post.author != current_user:
+            create_notification(
+                user_id=post.author.id,
+                notification_type='comment',
+                message=f"{current_user.username} commented on your post '{post.title}': {content[:50]}{'...' if len(content) > 50 else ''}",
+                related_post_id=post_id,
+                related_user_id=current_user.id
+            )
+        
         db.session.commit()
         flash('Comment added successfully!', 'success')
     
@@ -332,11 +484,16 @@ def add_comment(post_id):
 def delete_comment(comment_id):
     comment = Comment.query.get_or_404(comment_id)
     
-    # Allow deletion if user is: comment author, post author, admin, or Police/Reviewer
-    if (comment.author != current_user and 
-        comment.post.author != current_user and
-        not current_user.is_admin and 
-        current_user.role not in ['Police', 'Reviewer']):
+    # Strict permission check - only allow:
+    # 1. Comment author can delete their own comment
+    # 2. Post author can delete comments on their post
+    # 3. Admin can delete any comment
+    # 4. Police can delete any comment (but NOT Reviewers for comments)
+    
+    if not (comment.author == current_user or 
+            comment.post.author == current_user or 
+            current_user.is_admin or 
+            current_user.role == 'Police'):
         abort(403)
     
     post_id = comment.post_id
@@ -347,7 +504,59 @@ def delete_comment(comment_id):
     return redirect(url_for('post', post_id=post_id))
 
 # =====================================
-# SEARCH ROUTES
+# NOTIFICATION SYSTEM ROUTES
+# =====================================
+
+@app.route("/notifications")
+@login_required
+def notifications():
+    """View all notifications for current user"""
+    page = request.args.get('page', 1, type=int)
+    notifications = Notification.query.filter_by(user_id=current_user.id)\
+        .order_by(Notification.created_at.desc())\
+        .paginate(page=page, per_page=20)
+    
+    # Mark all notifications as read when user views them
+    Notification.query.filter_by(user_id=current_user.id, is_read=False).update({'is_read': True})
+    db.session.commit()
+    
+    form = EmptyForm()
+    return render_template('notifications.html', notifications=notifications, form=form, title='Notifications')
+
+@app.route("/notifications/unread_count")
+@login_required
+def unread_notifications_count():
+    """Get count of unread notifications (for AJAX)"""
+    count = Notification.query.filter_by(user_id=current_user.id, is_read=False).count()
+    return jsonify({'unread_count': count})
+
+@app.route("/notifications/mark_read/<int:notification_id>", methods=['POST'])
+@login_required
+def mark_notification_read(notification_id):
+    """Mark specific notification as read"""
+    notification = Notification.query.get_or_404(notification_id)
+    if notification.user_id != current_user.id:
+        abort(403)
+    
+    notification.is_read = True
+    db.session.commit()
+    return jsonify({'success': True})
+
+@app.route("/notifications/delete/<int:notification_id>", methods=['POST'])
+@login_required
+def delete_notification(notification_id):
+    """Delete specific notification"""
+    notification = Notification.query.get_or_404(notification_id)
+    if notification.user_id != current_user.id:
+        abort(403)
+    
+    db.session.delete(notification)
+    db.session.commit()
+    flash('Notification deleted!', 'success')
+    return redirect(url_for('notifications'))
+
+# =====================================
+# SEARCH & DISCOVERY ROUTES
 # =====================================
 
 @app.route("/search")
@@ -368,7 +577,6 @@ def search():
     
     # Search posts (exclude posts under review for non-privileged users)
     if current_user.is_authenticated and (current_user.is_admin or current_user.role == 'Police'):
-        # Police and Admin see all posts including under review
         posts = Post.query.filter(
             or_(
                 Post.title.ilike(f'%{query}%'),
@@ -376,7 +584,6 @@ def search():
             )
         ).order_by(Post.date_posted.desc()).paginate(page=page, per_page=10)
     else:
-        # Regular users don't see posts under review
         posts = Post.query.filter(
             and_(
                 Post.is_under_review == False,
@@ -434,13 +641,61 @@ def search_ajax():
     })
 
 # =====================================
-# ADMIN ROUTES
+# CONTENT MODERATION ROUTES
+# =====================================
+
+@app.route("/mark_for_review/<int:post_id>", methods=['POST'])
+@login_required
+def mark_for_review(post_id):
+    post = Post.query.get_or_404(post_id)
+    if current_user.role != 'Reviewer':
+        abort(403)
+    
+    post.is_under_review = True
+    
+    # Create notification for post author
+    create_notification(
+        user_id=post.author.id,
+        notification_type='post_marked',
+        message=f"Your post '{post.title}' has been marked for review by a moderator",
+        related_post_id=post_id,
+        related_user_id=current_user.id
+    )
+    
+    db.session.commit()
+    flash("Post marked for review!", "info")
+    return redirect(request.referrer or url_for('home'))
+
+@app.route("/unmark_for_review/<int:post_id>", methods=['POST'])
+@login_required
+def unmark_for_review(post_id):
+    post = Post.query.get_or_404(post_id)
+    if not (current_user.is_admin or current_user.role == 'Police'):
+        abort(403)
+    
+    post.is_under_review = False
+    
+    # Create notification for post author
+    role_name = "Admin" if current_user.is_admin else current_user.role
+    create_notification(
+        user_id=post.author.id,
+        notification_type='post_approved',
+        message=f"Your post '{post.title}' has been reviewed and approved by {role_name}. It is now visible to all users.",
+        related_post_id=post_id,
+        related_user_id=current_user.id
+    )
+    
+    db.session.commit()
+    flash("Post has been reviewed and is now visible!", "success")
+    return redirect(request.referrer or url_for('home'))
+
+# =====================================
+# ADMIN & USER MANAGEMENT ROUTES
 # =====================================
 
 @app.route("/admin/users", methods=['GET'])
 @login_required
 def admin_users():
-    # Check if current user is admin
     if not current_user.is_admin:
         abort(403)
     
@@ -451,13 +706,11 @@ def admin_users():
 @app.route("/admin/user/<int:user_id>/role", methods=['GET', 'POST'])
 @login_required
 def update_user_role(user_id):
-    # Check if current user is admin
     if not current_user.is_admin:
         abort(403)
     
     user = User.query.get_or_404(user_id)
     
-    # Prevent admin from changing their own role
     if user == current_user:
         flash('You cannot change your own role!', 'warning')
         return redirect(url_for('admin_users'))
@@ -479,13 +732,11 @@ def update_user_role(user_id):
 @app.route("/admin/user/<int:user_id>/toggle_admin", methods=['POST'])
 @login_required
 def toggle_admin_status(user_id):
-    # Check if current user is admin
     if not current_user.is_admin:
         abort(403)
     
     user = User.query.get_or_404(user_id)
     
-    # Prevent admin from removing their own admin status
     if user == current_user:
         flash('You cannot change your own admin status!', 'warning')
         return redirect(url_for('admin_users'))
@@ -498,31 +749,47 @@ def toggle_admin_status(user_id):
     
     return redirect(url_for('admin_users'))
 
-# =====================================
-# POST REVIEW SYSTEM ROUTES
-# =====================================
-
-@app.route("/mark_for_review/<int:post_id>", methods=['POST'])
+@app.route("/admin/user/<int:user_id>/delete", methods=['POST'])
 @login_required
-def mark_for_review(post_id):
-    post = Post.query.get_or_404(post_id)
-    if current_user.role != 'Reviewer':
+def delete_user(user_id):
+    """Delete a user account (Admin only)"""
+    if not current_user.is_admin:
         abort(403)
     
-    post.is_under_review = True
-    db.session.commit()
-    flash("Post marked for review!", "info")
-    return redirect(request.referrer or url_for('home'))
+    user = User.query.get_or_404(user_id)
+    
+    if user == current_user:
+        flash('You cannot delete your own account!', 'danger')
+        return redirect(url_for('admin_users'))
+    
+    username = user.username
+    email = user.email
+    posts_count = len(user.posts)
+    
+    try:
+        db.session.delete(user)
+        db.session.commit()
+        
+        flash(f'User "{username}" ({email}) has been permanently deleted along with {posts_count} posts and all related data.', 'success')
+        
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting user: {str(e)}', 'danger')
+    
+    return redirect(url_for('admin_users'))
 
-@app.route("/unmark_for_review/<int:post_id>", methods=['POST'])
-@login_required
-def unmark_for_review(post_id):
-    post = Post.query.get_or_404(post_id)
-    # Only Police or Admin can unmark
-    if not (current_user.is_admin or current_user.role == 'Police'):
+@app.route("/admin/user/<int:user_id>/suspend", methods=['POST'])
+@login_required  
+def suspend_user(user_id):
+    """Suspend/Unsuspend a user account (Alternative to deletion)"""
+    if not current_user.is_admin:
         abort(403)
     
-    post.is_under_review = False
-    db.session.commit()
-    flash("Post has been reviewed and is now visible!", "success")
-    return redirect(request.referrer or url_for('home'))
+    user = User.query.get_or_404(user_id)
+    
+    if user == current_user:
+        flash('You cannot suspend your own account!', 'warning')
+        return redirect(url_for('admin_users'))
+    
+    flash('Suspension feature coming soon!', 'info')
+    return redirect(url_for('admin_users'))

@@ -1,0 +1,99 @@
+{% extends "layout.html" %}
+{% block content %}
+<div class="main-content-wrapper">
+  <h2 style="color: white; text-align: center; margin-bottom: 2rem;">Notifications</h2>
+  
+  {% if notifications.items %}
+    {% for notification in notifications.items %}
+     <div class="notification-item content-section" {% if not notification.is_read %}style="border-left: 4px solid #bbe741;"{% endif %}>
+
+        <div class="d-flex justify-content-between align-items-start">
+          <div class="flex-grow-1">
+            <!-- Notification icon based on type -->
+            <div class="d-flex align-items-center">
+              {% if notification.type == 'like' %}
+                <i class="fas fa-heart text-danger mr-2"></i>
+              {% elif notification.type == 'comment' %}
+                <i class="fas fa-comment text-primary mr-2"></i>
+              {% elif notification.type == 'post_marked' %}
+                <i class="fas fa-exclamation-triangle text-warning mr-2"></i>
+              {% elif notification.type == 'post_approved' %}
+                <i class="fas fa-check-circle text-success mr-2"></i>
+              {% elif notification.type == 'post_deleted' %}
+                <i class="fas fa-trash text-danger mr-2"></i>
+              {% endif %}
+              
+              <div>
+                <p style="color: white; margin: 0;">{{ notification.message }}</p>
+                <small class="text-muted" style="color: #bbe741 !important;">
+                  {{ notification.time_since_created() }}
+                </small>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Action buttons -->
+          <div class="notification-actions">
+            {% if notification.related_post_id %}
+              <a href="{{ url_for('post', post_id=notification.related_post_id) }}" 
+                 class="btn btn-sm btn-outline-info mr-1">View Post</a>
+            {% endif %}
+            
+           <form action="{{ url_for('delete_notification', notification_id=notification.id) }}" 
+      method="POST" style="display: inline;">
+  {{ form.hidden_tag() }}
+  <button type="submit" class="btn btn-sm btn-outline-danger" 
+          onclick="return confirm('Delete this notification?')">
+    <i class="fas fa-times"></i>
+  </button>
+</form>
+
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+    
+    <!-- Pagination -->
+    <div class="pagination-center">
+      {% for page_num in notifications.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+        {% if page_num %}
+          {% if notifications.page == page_num %}
+            <a class="btn btn-info mb-4" href="{{ url_for('notifications', page=page_num) }}" 
+               style="background-color: #bbe741 !important; border-color: #bbe741 !important; color: #000 !important;">{{ page_num }}</a>
+          {% else %}
+            <a class="btn btn-outline-info mb-4" href="{{ url_for('notifications', page=page_num) }}" 
+               style="border-color: #bbe741 !important; color: #bbe741 !important;">{{ page_num }}</a>
+          {% endif %}
+        {% else %}
+          <span style="color: #bbe741;">...</span>
+        {% endif %}
+      {% endfor %}
+    </div>
+    
+  {% else %}
+    <div class="text-center">
+      <i class="fas fa-bell-slash fa-3x mb-3" style="color: #ccc;"></i>
+      <h4 style="color: #ccc;">No notifications yet</h4>
+      <p style="color: #999;">When you get likes, comments, or updates on your posts, you'll see them here.</p>
+    </div>
+  {% endif %}
+</div>
+
+<script>
+// Auto-refresh notification count every 30 seconds
+setInterval(function() {
+    fetch('/notifications/unread_count')
+        .then(response => response.json())
+        .then(data => {
+            const badge = document.getElementById('notificationBadge');
+            if (data.unread_count > 0) {
+                badge.textContent = data.unread_count;
+                badge.style.display = 'inline';
+            } else {
+                badge.style.display = 'none';
+            }
+        })
+        .catch(error => console.error('Error fetching notification count:', error));
+}, 30000);
+</script>
+{% endblock content %}

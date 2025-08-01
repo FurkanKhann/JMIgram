@@ -16,7 +16,7 @@
           <span class="badge badge-warning ml-2">Under Review</span>
         {% endif %}
         
-        <!-- Updated condition to include Police and Reviewer roles -->
+        <!-- Updated condition - Reviewers can see action buttons but not delete -->
         {% if post.author == current_user or current_user.is_admin or
               (current_user.is_authenticated and current_user.role in ['Police', 'Reviewer']) %}
           <div>
@@ -43,15 +43,17 @@
               </form>
             {% endif %}
 
-            <!-- Delete button with role indication -->
-            <button type="button" class="btn btn-danger btn-sm m-1"
-                    data-toggle="modal" data-target="#deleteModal">
-              {% if post.author == current_user %}
-                Delete
-              {% else %}
-                Delete ({{ current_user.role }})
-              {% endif %}
-            </button>
+            <!-- Delete button - REMOVED for Reviewers, only for author, admin, or police -->
+            {% if post.author == current_user or current_user.is_admin or current_user.role == 'Police' %}
+              <button type="button" class="btn btn-danger btn-sm m-1"
+                      data-toggle="modal" data-target="#deleteModal">
+                {% if post.author == current_user %}
+                  Delete
+                {% else %}
+                  Delete ({{ current_user.role }})
+                {% endif %}
+              </button>
+            {% endif %}
           </div>
         {% endif %}
       </div>
@@ -146,7 +148,7 @@
                 </small>
               </div>
               
-              <!-- Delete comment button (for comment author, post author, or admin) -->
+              <!-- Delete comment button - Reviewers can still delete comments -->
               {% if current_user.is_authenticated and (comment.author == current_user or post.author == current_user or current_user.is_admin or current_user.role in ['Police', 'Reviewer']) %}
                 <form action="{{ url_for('delete_comment', comment_id=comment.id) }}" 
                       method="POST" 

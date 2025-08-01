@@ -1,36 +1,164 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="content-section">
-    <form method="POST" action="">
-        {{ form.hidden_tag() }}
-        <fieldset class="form-group">
-            <legend class="border-bottom mb-4">Update Role for {{ user.username }}</legend>
-            
-            <div class="form-group">
-                {{ form.role.label(class="form-control-label") }}
-                {% if form.role.errors %}
-                    {{ form.role(class="form-control form-control-lg is-invalid") }}
-                    <div class="invalid-feedback">
-                        {% for error in form.role.errors %}
-                            <span>{{ error }}</span>
-                        {% endfor %}
+<div class="main-content-wrapper">
+    <div class="content-section">
+        <form method="POST" action="">
+            {{ form.hidden_tag() }}
+            <fieldset class="form-group">
+                <legend class="border-bottom mb-4" style="color: white;">Update Role for {{ user.username }}</legend>
+                
+                <div class="form-group">
+                    {{ form.role.label(class="form-control-label", style="color: white;") }}
+                    {% if form.role.errors %}
+                        {{ form.role(class="form-control form-control-lg is-invalid") }}
+                        <div class="invalid-feedback">
+                            {% for error in form.role.errors %}
+                                <span>{{ error }}</span>
+                            {% endfor %}
+                        </div>
+                    {% else %}
+                        {{ form.role(class="form-control form-control-lg") }}
+                    {% endif %}
+                </div>
+                
+                <!-- User Information Section -->
+                <div class="user-info-section mt-4 p-3" style="background-color: rgba(187, 231, 65, 0.1); border-left: 4px solid #bbe741; border-radius: 5px;">
+                    <h5 style="color: #bbe741;">User Information</h5>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <p style="color: white;"><strong>Username:</strong> {{ user.username }}</p>
+                            <p style="color: white;"><strong>Email:</strong> {{ user.email }}</p>
+                            <p style="color: white;"><strong>Current Role:</strong> 
+                                <span class="badge badge-{% if user.role == 'Police' %}danger{% elif user.role == 'Reviewer' %}warning{% else %}secondary{% endif %}">
+                                    {{ user.role }}
+                                </span>
+                            </p>
+                        </div>
+                        <div class="col-md-6">
+                            <p style="color: white;"><strong>Admin Status:</strong> 
+                                {% if user.is_admin %}
+                                    <span class="badge badge-success">Admin</span>
+                                {% else %}
+                                    <span class="badge badge-secondary">Regular User</span>
+                                {% endif %}
+                            </p>
+                            <p style="color: white;"><strong>Email Verified:</strong> 
+                                {% if user.email_verified %}
+                                    <span class="badge badge-success">Verified</span>
+                                {% else %}
+                                    <span class="badge badge-danger">Not Verified</span>
+                                {% endif %}
+                            </p>
+                            <p style="color: white;"><strong>Posts Count:</strong> {{ user.posts|length }}</p>
+                        </div>
                     </div>
-                {% else %}
-                    {{ form.role(class="form-control form-control-lg") }}
+                </div>
+            </fieldset>
+            
+            <!-- Action Buttons -->
+            <div class="form-group">
+                {{ form.submit(class="btn btn-success", value="Update Role") }}
+                <a class="btn btn-secondary ml-2" href="{{ url_for('admin_users') }}">Cancel</a>
+                
+                <!-- Toggle Admin Status Button -->
+                {% if user != current_user %}
+                    <form action="{{ url_for('toggle_admin_status', user_id=user.id) }}" method="POST" style="display: inline;" class="ml-2">
+                        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                        {% if user.is_admin %}
+                            <button type="submit" class="btn btn-warning btn-sm" onclick="return confirm('Remove admin privileges from {{ user.username }}?')">
+                                Remove Admin
+                            </button>
+                        {% else %}
+                            <button type="submit" class="btn btn-info btn-sm" onclick="return confirm('Grant admin privileges to {{ user.username }}?')">
+                                Make Admin
+                            </button>
+                        {% endif %}
+                    </form>
                 {% endif %}
             </div>
             
-            <div class="form-group">
-                <small class="text-muted">
-                    Current role: <strong>{{ user.role }}</strong>
-                </small>
-            </div>
-        </fieldset>
-        
-        <div class="form-group">
-            {{ form.submit(class="btn btn-outline-info") }}
-            <a class="btn btn-outline-secondary" href="{{ url_for('admin_users') }}">Cancel</a>
-        </div>
-    </form>
+            <!-- Danger Zone - Delete User -->
+            {% if user != current_user %}
+                <div class="danger-zone mt-5 p-3" style="border: 2px solid #dc3545; border-radius: 8px; background-color: rgba(220, 53, 69, 0.1);">
+                    <h5 style="color: #dc3545;"><i class="fas fa-exclamation-triangle"></i> Danger Zone</h5>
+                    <p style="color: white;">Deleting a user will permanently remove their account, all posts, comments, and likes. This action cannot be undone.</p>
+                    
+                    <button type="button" class="btn btn-danger" data-toggle="modal" data-target="#deleteUserModal">
+                        <i class="fas fa-trash"></i> Delete User Account
+                    </button>
+                </div>
+            {% endif %}
+        </form>
+    </div>
 </div>
+
+<!-- Delete User Confirmation Modal -->
+{% if user != current_user %}
+<div class="modal fade" id="deleteUserModal" tabindex="-1" role="dialog" aria-labelledby="deleteUserModalLabel" aria-hidden="true">
+    <div class="modal-dialog" role="document">
+        <div class="modal-content" style="background-color: #1e1e1e; color: white;">
+            <div class="modal-header" style="border-bottom: 1px solid #333;">
+                <h5 class="modal-title" id="deleteUserModalLabel">
+                    <i class="fas fa-exclamation-triangle text-danger"></i> Delete User Account
+                </h5>
+                <button type="button" class="close" data-dismiss="modal" aria-label="Close" style="color: white;">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            <div class="modal-body">
+                <div class="alert" style="background-color: rgba(220, 53, 69, 0.2); border: 1px solid #dc3545; color: white;">
+                    <strong>⚠️ WARNING: This action is irreversible!</strong>
+                </div>
+                
+                <p>You are about to permanently delete the user account for:</p>
+                <ul style="color: #bbe741;">
+                    <li><strong>Username:</strong> {{ user.username }}</li>
+                    <li><strong>Email:</strong> {{ user.email }}</li>
+                    <li><strong>Role:</strong> {{ user.role }}</li>
+                    <li><strong>Posts:</strong> {{ user.posts|length }} posts will be deleted</li>
+                </ul>
+                
+                <p style="color: #ff6b6b;"><strong>This will also delete:</strong></p>
+                <ul style="color: #ccc;">
+                    <li>All posts created by this user</li>
+                    <li>All comments made by this user</li>
+                    <li>All likes given by this user</li>
+                    <li>All notifications related to this user</li>
+                </ul>
+                
+                <hr style="border-color: #333;">
+                <p style="color: white;">Please type <strong style="color: #bbe741;">"DELETE {{ user.username }}"</strong> to confirm:</p>
+                <input type="text" id="deleteConfirmation" class="form-control" placeholder="Type DELETE {{ user.username }}" style="background-color: #1e1e1e; border: 1px solid #dc3545; color: white;">
+            </div>
+            <div class="modal-footer" style="border-top: 1px solid #333;">
+                <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('delete_user', user_id=user.id) }}" method="POST" style="display: inline;">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                    <button type="submit" id="confirmDeleteBtn" class="btn btn-danger" disabled>
+                        <i class="fas fa-trash"></i> Delete User Permanently
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// Enable delete button only when correct text is typed
+document.getElementById('deleteConfirmation').addEventListener('input', function() {
+    const confirmText = 'DELETE {{ user.username }}';
+    const deleteBtn = document.getElementById('confirmDeleteBtn');
+    
+    if (this.value === confirmText) {
+        deleteBtn.disabled = false;
+        deleteBtn.classList.remove('btn-danger');
+        deleteBtn.classList.add('btn-outline-danger');
+    } else {
+        deleteBtn.disabled = true;
+        deleteBtn.classList.remove('btn-outline-danger');
+        deleteBtn.classList.add('btn-danger');
+    }
+});
+</script>
+{% endif %}
 {% endblock content %}

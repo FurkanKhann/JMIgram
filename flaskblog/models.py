@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime,timedelta
 from flaskblog import db, login_manager
 from flask_login import UserMixin
 from itsdangerous import URLSafeTimedSerializer as Serializer
@@ -19,11 +19,16 @@ class User(db.Model, UserMixin):
     password = db.Column(db.String(60), nullable=False)
     is_admin = db.Column(db.Boolean, default=False)
     role = db.Column(db.String(30), default="Student")
+    
+    # NEW - Email verification fields
+    email_verified = db.Column(db.Boolean, default=False)
+    verification_token = db.Column(db.String(100), nullable=True)
+    token_created_at = db.Column(db.DateTime, nullable=True)
 
     def __repr__(self):
         return f"User('{self.username}', '{self.email}', Admin={self.is_admin})"
 
-    # Relationships
+    # Existing relationships
     posts = db.relationship('Post', backref='author', lazy=True)
     likes = db.relationship('Like', backref='user', lazy=True, cascade='all, delete-orphan')
     comments = db.relationship('Comment', backref='author', lazy=True, cascade='all, delete-orphan')
@@ -34,9 +39,54 @@ class User(db.Model, UserMixin):
     def check_password(self, password):
         return check_password_hash(self.password, password)
 
+    def has_liked_post(self, post):
+        return Like.query.filter_by(user_id=self.id, post_id=post.id).first() is not None
+
     def get_reset_token(self, expires_sec=1800):
         s = Serializer(current_app.config['SECRET_KEY'])
         return s.dumps({'user_id': self.id})
+
+    @staticmethod
+    def verify_reset_token(token, expires_sec=1800):
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token, max_age=expires_sec)
+            user_id = data.get('user_id')
+        except:
+            return None
+        return User.query.get(user_id)
+
+    # NEW - Email verification methods
+    def generate_verification_token(self):
+        """Generate email verification token"""
+        s = Serializer(current_app.config['SECRET_KEY'])
+        token = s.dumps({'user_id': self.id, 'email': self.email})
+        self.verification_token = token
+        self.token_created_at = datetime.utcnow()
+        return token
+
+    @staticmethod
+    def verify_email_token(token, expires_sec=3600):  # 1 hour expiry
+        """Verify email verification token"""
+        s = Serializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token, max_age=expires_sec)
+            user_id = data.get('user_id')
+            email = data.get('email')
+        except:
+            return None
+        
+        user = User.query.get(user_id)
+        if user and user.email == email:
+            return user
+        return None
+
+    def is_token_expired(self, expires_sec=3600):
+        """Check if verification token is expired"""
+        if not self.token_created_at:
+            return True
+        return datetime.utcnow() > self.token_created_at + timedelta(seconds=expires_sec)
+
 
     @staticmethod
     def verify_reset_token(token, expires_sec=1800):
@@ -102,3 +152,64 @@ class Comment(db.Model):
 
     def __repr__(self):
         return f"Comment('{self.content[:20]}...', User={self.user_id}, Post={self.post_id})"
+
+
+class Notification(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    type = db.Column(db.String(50), nullable=False)  # 'post_marked', 'post_deleted', 'post_approved', 'like', 'comment'
+    message = db.Column(db.String(255), nullable=False)
+    related_post_id = db.Column(db.Integer, db.ForeignKey('post.id'), nullable=True)
+    related_user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=True)  # Who triggered the notification
+    is_read = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationships
+    user = db.relationship('User', foreign_keys=[user_id], backref='notifications')
+    related_user = db.relationship('User', foreign_keys=[related_user_id])
+    related_post = db.relationship('Post', backref='notifications')
+
+    def __repr__(self):
+        return f"Notification('{self.type}', '{self.message}', Read={self.is_read})"
+
+    def time_since_created(self):
+        """Return human-readable time since notification was created"""
+        now = datetime.utcnow()
+        diff = now - self.created_at
+        
+        if diff.days > 0:
+            return f"{diff.days}d ago"
+        elif diff.seconds > 3600:
+            return f"{diff.seconds // 3600}h ago"
+        elif diff.seconds > 60:
+            return f"{diff.seconds // 60}m ago"
+        else:
+            return "Just now"
+
+
+def delete_user_data(self):
+    """Comprehensive user data deletion"""
+    try:
+        # Delete all notifications related to this user
+        Notification.query.filter(
+            (Notification.user_id == self.id) | 
+            (Notification.related_user_id == self.id)
+        ).delete()
+        
+        # Delete all likes by this user
+        Like.query.filter_by(user_id=self.id).delete()
+        
+        # Delete all comments by this user
+        Comment.query.filter_by(user_id=self.id).delete()
+        
+        # Delete all posts by this user (this will also delete related likes/comments)
+        Post.query.filter_by(user_id=self.id).delete()
+        
+        # Finally delete the user
+        db.session.delete(self)
+        db.session.commit()
+        
+        return True
+    except Exception as e:
+        db.session.rollback()
+        return False

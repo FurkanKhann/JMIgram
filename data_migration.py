@@ -1,30 +1,27 @@
-from flaskblog import db, app, bcrypt
-from flaskblog.models import User, Post,Like, Comment
+from flaskblog import app, db
+from flaskblog.models import User
 
-def migrate_database():
-    """
-    Safely add new tables without losing existing data
-    """
+def add_email_verification_columns():
+    """Add email verification columns to existing users table"""
     with app.app_context():
         try:
-            print("Starting database migration...")
+            print("Adding email verification columns...")
             
-            # Create new tables (Like and Comment) without affecting existing ones
-            db.create_all()
+            # Create new columns
+            db.engine.execute('ALTER TABLE user ADD COLUMN email_verified BOOLEAN DEFAULT 0')
+            db.engine.execute('ALTER TABLE user ADD COLUMN verification_token VARCHAR(100)')
+            db.engine.execute('ALTER TABLE user ADD COLUMN token_created_at DATETIME')
             
-            print("Migration completed successfully!")
-            print("New tables created: Like, Comment")
-            print("Existing data in User and Post tables preserved.")
+            # Optional: Set existing users as verified
+            # Uncomment the next line to auto-verify existing users
+            # db.engine.execute('UPDATE user SET email_verified = 1 WHERE email_verified IS NULL')
             
-            # Verify existing data
-            user_count = User.query.count()
-            post_count = Post.query.count()
-            
-            print(f"Verified: {user_count} users and {post_count} posts still exist.")
+            print("Email verification columns added successfully!")
+            print("Note: Existing users will need to verify their email addresses.")
             
         except Exception as e:
-            print(f"Error during migration: {str(e)}")
-            db.session.rollback()
+            print(f"Error: {e}")
+            print("Columns may already exist or there was a database error.")
 
 if __name__ == "__main__":
-    migrate_database()
+    add_email_verification_columns()

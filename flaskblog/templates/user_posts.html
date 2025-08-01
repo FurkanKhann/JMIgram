@@ -1,31 +1,50 @@
 {% extends "layout.html" %}
 {% block content %}
-  <h1 class="mb-3" style="color: aliceblue;">Posts by {{ user.username }} ({{ posts.total }})</h1>
+<div class="main-content-wrapper">
+  <h1 class="mb-3" style="color: aliceblue; text-align: center;">Posts by {{ user.username }} ({{ posts.total }})</h1>
+  
   {% for post in posts.items %}
   <article class="media content-section">
     <img class="rounded-circle article-img" src="{{ url_for('static', filename='profile_pic/' + post.author.image_file) }}">
     <div class="media-body">
       <div class="article-metadata">
         <a class="mr-2" href="{{ url_for('user_posts', username=post.author.username) }}">{{ post.author.username }}</a>
-        <small class="text-muted">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
+        <small class="text-muted" style="color: #bbe741;">{{ post.date_posted.strftime('%B %d, %Y') }}</small>
       </div>
       <h2><a class="article-title" href="{{ url_for('post', post_id=post.id) }}">{{ post.title }}</a></h2>
-      <p class="article-content" style="color: white;">{{ post.content }}</p>
-
+      
+      <!-- Display post image if exists -->
+      {% if post.image_file %}
+        <div class="mb-3">
+          <img src="{{ url_for('static', filename='post_images/' + post.image_file) }}" 
+               class="img-fluid rounded" alt="Post image" 
+               style="max-width: 100%; height: auto; max-height: 400px; object-fit: cover;">
+        </div>
+      {% endif %}
+      
+      <!-- Display post content if exists -->
+      {% if post.content %}
+        <p class="article-content" style="color: white;">{{ post.content }}</p>
+      {% endif %}
     </div>
   </article>
   {% endfor %}
 
-  {# Pagination #}
-  {% for page_num in posts.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
-    {% if page_num %}
-      {% if posts.page == page_num %}
-        <a class="btn btn-info mb-4" href="{{ url_for('user_posts', username=user.username, page=page_num) }}">{{ page_num }}</a>
+  <!-- Pagination -->
+  <div class="pagination-center">
+    {% for page_num in posts.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+      {% if page_num %}
+        {% if posts.page == page_num %}
+          <a class="btn btn-info mb-4" href="{{ url_for('user_posts', username=user.username, page=page_num) }}" 
+             style="background-color: #bbe741 !important; border-color: #bbe741 !important; color: #000 !important;">{{ page_num }}</a>
+        {% else %}
+          <a class="btn btn-outline-info mb-4" href="{{ url_for('user_posts', username=user.username, page=page_num) }}" 
+             style="border-color: #bbe741 !important; color: #bbe741 !important;">{{ page_num }}</a>
+        {% endif %}
       {% else %}
-        <a class="btn btn-outline-info mb-4" href="{{ url_for('user_posts', username=user.username, page=page_num) }}">{{ page_num }}</a>
+        <span class="pagination-ellipsis" style="color: #bbe741; padding: 0.375rem 0.75rem; margin: 0 0.25rem;">...</span>
       {% endif %}
-    {% else %}
-      ...
-    {% endif %}
-  {% endfor %}
+    {% endfor %}
+  </div>
+</div>
 {% endblock content %}

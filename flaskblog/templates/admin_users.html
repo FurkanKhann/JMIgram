@@ -1,108 +1,147 @@
 {% extends "layout.html" %}
 {% block content %}
-<div class="content-section">
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <h2 style="color: white;">Manage Users</h2>
-        <small class="text-muted">Total Users: {{ users.total }}</small>
-    </div>
+<div class="main-content-wrapper">
+  <div class="content-section">
+    <h2 style="color: white; text-align: center; margin-bottom: 2rem;">Manage Users</h2>
     
-    <div class="table-responsive">
-        <table class="table table-striped">
-            <thead>
-                <tr>
-                    <th>ID</th>
-                    <th>Username</th>
-                    <th>Email</th>
-                    <th>Role</th>
-                    <th>Admin Status</th>
-                    <th>Actions</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for user in users.items %}
-                <tr>
-                    <td>{{ user.id }}</td>
-                    <td>
-                        <a class="myclr" href="{{ url_for('user_posts', username=user.username) }}">
-    {{ user.username }}
-</a>
-                    </td>
-                    <td>{{ user.email }}</td>
-                    <td>
-                        <span class="badge badge-{% if user.role == 'Police' %}danger{% elif user.role == 'Reviewer' %}warning{% else %}secondary{% endif %}">
-                            {{ user.role }}
-                        </span>
-                    </td>
-                    <td>
-                        {% if user.is_admin %}
-                            <span class="badge badge-success">Admin</span>
-                        {% else %}
-                            <span class="badge badge-light">User</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        {% if user != current_user %}
-                            <div class="d-flex gap-3">
-                                <a href="{{ url_for('update_user_role', user_id=user.id) }}" 
-                                   class="btn btn-sm" style="background-color: #007bff; color: white; border: 1px solid #007bff;">Change Role</a>
-                                
-                                <form method="POST" action="{{ url_for('toggle_admin_status', user_id=user.id) }}" 
-                                      style="display: inline;">
-                                    <button type="submit" class="btn btn-sm"
-                                            style="background-color: {% if user.is_admin %}#dc3545{% else %}#28a745{% endif %}; color: white; border: 1px solid {% if user.is_admin %}#dc3545{% else %}#28a745{% endif %};"
-                                            onclick="return confirm('Are you sure you want to {% if user.is_admin %}revoke{% else %}grant{% endif %} admin privileges?')">
-                                        {% if user.is_admin %}Revoke Admin{% else %}Make Admin{% endif %}
-                                    </button>
-                                </form>
-                            </div>
-                        {% else %}
-                            <small class="text-muted">Current User</small>
-                        {% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-    </div>
+    {% if users.items %}
+      <div class="table-responsive">
+        <table class="table table-dark table-striped">
+          <thead>
+            <tr>
+              <th>Profile</th>
+              <th>Username</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Admin Status</th>
+              <th>Email Verified</th>
+              <th>Posts</th>
+              <th>Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for user in users.items %}
+              <tr>
+                <td>
+                  <img src="{{ url_for('static', filename='profile_pic/' + user.image_file) }}" 
+                       class="rounded-circle" 
+                       style="width: 40px; height: 40px; object-fit: cover;">
+                </td>
+                <td style="color: #bbe741;">{{ user.username }}</td>
+                <td style="color: white;">{{ user.email }}</td>
+                <td>
+                  <span class="badge badge-{% if user.role == 'Police' %}danger{% elif user.role == 'Reviewer' %}warning{% else %}secondary{% endif %}">
+                    {{ user.role }}
+                  </span>
+                </td>
+                <td>
+                  {% if user.is_admin %}
+                    <span class="badge badge-success">Admin</span>
+                  {% else %}
+                    <span class="badge badge-secondary">User</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if user.email_verified %}
+                    <span class="badge badge-success"><i class="fas fa-check"></i></span>
+                  {% else %}
+                    <span class="badge badge-danger"><i class="fas fa-times"></i></span>
+                  {% endif %}
+                </td>
+                <td style="color: white;">{{ user.posts|length }}</td>
+                <td>
+                  <!-- Manage User Button -->
+                  <a href="{{ url_for('update_user_role', user_id=user.id) }}" 
+                     class="btn btn-sm btn-info mb-1">
+                    <i class="fas fa-edit"></i> Manage
+                  </a>
+                  
+                  <!-- Delete User Button (only if not current user) -->
+                  {% if user != current_user %}
+                    <button type="button" 
+                            class="btn btn-sm btn-danger mb-1" 
+                            data-toggle="modal" 
+                            data-target="#deleteModal{{ user.id }}">
+                      <i class="fas fa-trash"></i>
+                    </button>
+                  {% endif %}
+                </td>
+              </tr>
 
-    <!-- Pagination -->
-    {% if users.pages > 1 %}
-    <nav aria-label="Page navigation">
-        <ul class="pagination justify-content-center">
-            {% if users.has_prev %}
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('admin_users', page=users.prev_num) }}" 
-                       style="background-color: #6c757d; color: black; border: 1px solid #6c757d;">Previous</a>
-                </li>
-            {% endif %}
-            
-            {% for page_num in users.iter_pages() %}
-                {% if page_num %}
-                    {% if page_num != users.page %}
-                        <li class="page-item">
-                            <a class="page-link" href="{{ url_for('admin_users', page=page_num) }}" 
-                               style="background-color: #6c757d; color: black; border: 1px solid #6c757d;">{{ page_num }}</a>
-                        </li>
-                    {% else %}
-                        <li class="page-item active">
-                            <span class="page-link" style="background-color: #17a2b8; color: white; border: 1px solid #17a2b8;">{{ page_num }}</span>
-                        </li>
-                    {% endif %}
-                {% else %}
-                    <li class="page-item disabled">
-                        <span class="page-link">...</span>
-                    </li>
-                {% endif %}
+              <!-- Delete User Modal for each user -->
+              {% if user != current_user %}
+                <div class="modal fade" id="deleteModal{{ user.id }}" tabindex="-1" role="dialog">
+                  <div class="modal-dialog" role="document">
+                    <div class="modal-content" style="background-color: #1e1e1e; color: white;">
+                      <div class="modal-header" style="border-bottom: 1px solid #333;">
+                        <h5 class="modal-title">
+                          <i class="fas fa-exclamation-triangle text-danger"></i> Delete User
+                        </h5>
+                        <button type="button" class="close" data-dismiss="modal" style="color: white;">
+                          <span>&times;</span>
+                        </button>
+                      </div>
+                      <div class="modal-body">
+                        <p>Are you sure you want to delete user <strong style="color: #bbe741;">{{ user.username }}</strong>?</p>
+                        <p style="color: #ff6b6b;">This will permanently delete:</p>
+                        <ul style="color: #ccc;">
+                          <li>User account: {{ user.email }}</li>
+                          <li>All posts: {{ user.posts|length }} posts</li>
+                          <li>All comments and likes</li>
+                          <li>All related data</li>
+                        </ul>
+                        <p><strong style="color: #dc3545;">This action cannot be undone!</strong></p>
+                      </div>
+                      <div class="modal-footer" style="border-top: 1px solid #333;">
+                        <button type="button" class="btn btn-secondary" data-dismiss="modal">Cancel</button>
+                        <form action="{{ url_for('delete_user', user_id=user.id) }}" 
+                              method="POST" style="display: inline;">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"/>
+                          <button type="submit" class="btn btn-danger">
+                            <i class="fas fa-trash"></i> Delete User
+                          </button>
+                        </form>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              {% endif %}
             {% endfor %}
-            
-            {% if users.has_next %}
-                <li class="page-item">
-                    <a class="page-link" href="{{ url_for('admin_users', page=users.next_num) }}" 
-                       style="background-color: #6c757d; color: white; border: 1px solid #6c757d;">Next</a>
-                </li>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Pagination -->
+      <div class="pagination-center">
+        {% for page_num in users.iter_pages(left_edge=1, right_edge=1, left_current=1, right_current=2) %}
+          {% if page_num %}
+            {% if users.page == page_num %}
+              <a class="btn btn-info mb-4" href="{{ url_for('admin_users', page=page_num) }}" 
+                 style="background-color: #bbe741 !important; border-color: #bbe741 !important; color: #000 !important;">
+                {{ page_num }}
+              </a>
+            {% else %}
+              <a class="btn btn-outline-info mb-4" href="{{ url_for('admin_users', page=page_num) }}" 
+                 style="border-color: #bbe741 !important; color: #bbe741 !important;">
+                {{ page_num }}
+              </a>
             {% endif %}
-        </ul>
-    </nav>
+          {% else %}
+            <span style="color: #bbe741;">...</span>
+          {% endif %}
+        {% endfor %}
+      </div>
+
+    {% else %}
+      <div class="text-center">
+        <i class="fas fa-users fa-3x mb-3" style="color: #ccc;"></i>
+        <h4 style="color: #ccc;">No Users Found</h4>
+        <p style="color: #999;">There are no users to manage at the moment.</p>
+      </div>
     {% endif %}
+  </div>
 </div>
+
+<!-- Font Awesome for icons -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
 {% endblock content %}
